@@ -123,8 +123,61 @@ func (c Client) Run(cmd string) ([]byte, error) {
 	return sess.CombinedOutput(cmd)
 }
 
+
+// Run starts a new SSH session and runs the cmd, it returns CombinedOutput and err if any.
+func (c Client) RunEscalated(cmd string) ([]byte, error) {
+
+	cmd = "echo " + c.Config.Pass + "| sudo -S su && " + cmd
+	var (
+		err  error
+		sess *ssh.Session
+	)
+
+	if sess, err = c.NewSession(); err != nil {
+		return nil, err
+	}
+
+	defer sess.Close()
+
+	return sess.CombinedOutput(cmd)
+}
+
+// Run starts a new SSH session with context and runs the cmd. It returns CombinedOutput and err if any.
+func (c Client) RunContextEscalated(ctx context.Context, cmdString string) ([]byte, error) {
+
+	cmdString = fmt.Sprintf(`  cat | sudo --prompt="" -S -- "/usr/bin/sh" << EOF
+%s
+%s
+EOF
+`	,c.Config.Pass, cmdString)
+
+
+
+	cmd, err := c.CommandContext(ctx, cmdString)
+	if err != nil {
+		return nil, err
+	}
+
+	return cmd.CombinedOutput()
+}
+
+
+
 // Run starts a new SSH session with context and runs the cmd. It returns CombinedOutput and err if any.
 func (c Client) RunContext(ctx context.Context, name string) ([]byte, error) {
+
+
+
+	if strings.HasPrefix(name, "sudo") {
+		if c.Config.Pass == "" {
+			return nil, errors.New("Config.Pass is not set")
+		}
+		// if c.Config.Pass {}
+		/// you have to run sudo commands like this:
+		/// echo '[password]' | sudo -S [command]
+		name = "echo " + c.Config.Pass + "| sudo -S " + name[5:]
+	}
+
 	cmd, err := c.CommandContext(ctx, name)
 	if err != nil {
 		return nil, err
